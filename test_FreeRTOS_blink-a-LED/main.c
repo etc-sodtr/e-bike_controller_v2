@@ -51,9 +51,9 @@ int main(void) {
 
 	// create blinking task
 	xTaskCreate(blink_Led_PA1, "blink_PA1", configMINIMAL_STACK_SIZE, NULL, 1, NULL); // LED pe PORTA1; 1Hz
-	xTaskCreate(blink_Led_PA2, "blink_PA2", configMINIMAL_STACK_SIZE, NULL, 1, NULL); // LED pe PORTA2; 2Hz
-	xTaskCreate(blink_Led_PA3, "blink_PA3", configMINIMAL_STACK_SIZE, NULL, 1, NULL); // LED pe PORTA3; 3Hz
-	xTaskCreate(blink_Led_PA4, "blink_PA4", configMINIMAL_STACK_SIZE, NULL, 1, NULL); // LED pe PORTA4; 4Hz
+	xTaskCreate(blink_Led_PA2, "blink_PA2", configMINIMAL_STACK_SIZE, NULL, 2, NULL); // LED pe PORTA2; 2Hz
+	xTaskCreate(blink_Led_PA3, "blink_PA3", configMINIMAL_STACK_SIZE, NULL, 3, NULL); // LED pe PORTA3; 3Hz
+	xTaskCreate(blink_Led_PA4, "blink_PA4", configMINIMAL_STACK_SIZE, NULL, 4, NULL); // LED pe PORTA4; 4Hz
 
 	// start the scheduler
 	vTaskStartScheduler();
@@ -64,50 +64,54 @@ int main(void) {
 /*-----------------------------------------------------------*/
 
 static void blink_Led_PA1(void *pvParameters) {
-	TickType_t xLastWakeTime = xTaskGetTickCount();
+	TickType_t xLastWakeTime;
 	const TickType_t delay = 3000;
 
 	(void)pvParameters; // parameters not used
 
 	// forever loop
 	while (1) {
-		vTaskDelayUntil(&xLastWakeTime, delay/2);
+		xLastWakeTime = xTaskGetTickCount();
 		pin_Toggle(A,1);
+		vTaskDelayUntil(&xLastWakeTime, delay/2);
 	}
 }
 static void blink_Led_PA2(void *pvParameters) {
-	TickType_t xLastWakeTime = xTaskGetTickCount();
+	TickType_t xLastWakeTime;
 	const TickType_t delay = 1500;
 
 	(void)pvParameters; // parameters not used
 
 	// forever loop
 	while (1) {
-		vTaskDelayUntil(&xLastWakeTime, delay/2);
+		xLastWakeTime = xTaskGetTickCount();
 		pin_Toggle(A,2);
+		vTaskDelayUntil(&xLastWakeTime, delay/2);
 	}
 }
 static void blink_Led_PA3(void *pvParameters) {
-	TickType_t xLastWakeTime = xTaskGetTickCount();
-	const TickType_t delay = 1000;
-
-	(void)pvParameters; // parameters not used
-
-	// forever loop
-	while (1) {
-		vTaskDelayUntil(&xLastWakeTime, delay/2);
-		pin_Toggle(A,3);
-	}
-}
-static void blink_Led_PA4(void *pvParameters) {
-	TickType_t xLastWakeTime = xTaskGetTickCount();
+	TickType_t xLastWakeTime;
 	const TickType_t delay = 750;
 
 	(void)pvParameters; // parameters not used
 
 	// forever loop
 	while (1) {
+		xLastWakeTime = xTaskGetTickCount();
+		pin_Toggle(A,3);
 		vTaskDelayUntil(&xLastWakeTime, delay/2);
+	}
+}
+static void blink_Led_PA4(void *pvParameters) {
+	TickType_t xLastWakeTime;
+	const TickType_t delay = 375;
+
+	(void)pvParameters; // parameters not used
+
+	// forever loop
+	while (1) {
+		xLastWakeTime = xTaskGetTickCount();
 		pin_Toggle(A,4);
+		vTaskDelayUntil(&xLastWakeTime, delay/2);
 	}
 }

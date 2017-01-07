@@ -23,4 +23,9 @@ Funcționalități implementate în programul final:
 * măsuri de protecție:
   * OCP (supracurent motor);
   * UVP (subtensiune baterie);
-  * OTP (supratemperatură modul electronic).
+  * OTP (supratemperatură modul electronic)
+
+Video test:
+[https://youtu.be/RDsVpeOm2Dg](https://youtu.be/RDsVpeOm2Dg)<br>
+După cum se poate observa și în videoclipul de mai sus, momentan există mici probleme legate de transmisia de date.<br>
+(se pare că uneori transmisia mesajelor este întreruptă).

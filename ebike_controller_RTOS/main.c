@@ -68,34 +68,31 @@ static void SignalLights(void *pvParameters);
 
 /*** GLOBAL VARIABLES SECTION ***/
 
-uint16_t acceleration		= 0x00;
-uint16_t batt_voltage		= 0x00;
-uint16_t H3_current			= 0x00;
-uint16_t hall_pulsesPerSec	= 0x00;
-uint8_t	 hall_sensorStates	= 0x00;
-uint16_t MAX6175_temp		= 0x00;
+volatile uint16_t acceleration = 0x00;
+volatile uint16_t batt_voltage = 0x00;
+volatile uint16_t H3_current   = 0x00;
+volatile uint16_t MAX6175_temp = 0x00;
 
-uint8_t UVP_counter = 0x00; // contor protectie subtensiune
-uint8_t OCP_counter = 0x00; // contor protectie supracurent
-uint8_t OTP_counter = 0x00; // contor protectie supratemperatura
+volatile uint16_t hall_pulsesPerSec = 0x00;
+volatile uint8_t  hall_sensorStates = 0x00;
 
-uint16_t speed_level = 0x00;
-uint16_t motor_power = 0x00;
-uint16_t motor_power_limited = 0x00;
+volatile uint16_t speed_level       = 0x00;
+volatile uint8_t  speed_whole       = 0x00; // pentru afisare viteza - partea intreaga a numarului
+volatile uint8_t  speed_fract       = 0x00; // pentru afisare viteza - partea fractionara a numarului
 
-float   speed       = 0.0;
-uint8_t speed_whole = 0x00; // pentru afisare viteza - partea intreaga a numarului
-uint8_t speed_fract = 0x00; // pentru afisare viteza - partea fractionara a numarului
+volatile uint16_t motor_power         = 0x00;
+volatile uint16_t motor_power_limited = 0x00;
 
-uint8_t	 flags = 0b00000000;
-//				   |||||||'-- 0 - stare far:   1 = on; 0 = off
-//				   ||||||'--- 1 - stare motor: 1 = on; 0 = off
-//				   |||||'---- 2 - stare semnalizare stg: 1 = blink; 0 = off
-//				   ||||'----- 3 - stare semnalizare dr:  1 = blink; 0 = off
-//				   |||'------ 4 - N/A
-//				   ||'------- 5 - N/A
-//				   |'-------- 6 - stare sistem: 1 = avarie; 0 = sistem OK
-//				   '--------- 7 - debug: 1 = on; 0 = off
+
+volatile uint8_t flags = 0b00000000;
+//                         |||||||'-- 0 - stare far:   1 = on; 0 = off
+//                         ||||||'--- 1 - stare motor: 1 = on; 0 = off
+//                         |||||'---- 2 - stare semnalizare stg: 1 = blink; 0 = off
+//                         ||||'----- 3 - stare semnalizare dr:  1 = blink; 0 = off
+//                         |||'------ 4 - N/A
+//                         ||'------- 5 - N/A
+//                         |'-------- 6 - stare sistem: 1 = avarie; 0 = sistem OK
+//                         '--------- 7 - debug: 1 = on; 0 = off
 /*** END GLOBAL VARIABLES SECTION ***/
 
 /*** MUTEXES SECTION ***/
@@ -199,13 +196,24 @@ static void ADC_readInputs(void *pvParameters) {
 	(void)pvParameters;
 	mutex_ADCvalues = xSemaphoreCreateMutex();
 	
+	// variabile locale
+	uint16_t MAX6175_temp_local = 0x00;
+	uint16_t H3_current_local   = 0x00;
+	uint16_t batt_voltage_local = 0x00;
+	uint16_t acceleration_local = 0x00;
+	
 	while (1) {
+		MAX6175_temp_local = read_adc10(0);
+		H3_current_local   = read_adc10(1);
+		batt_voltage_local = read_adc10(2);
+		acceleration_local = read_adc10(7);
+		
 		if (mutex_ADCvalues != NULL) {
 			if (xSemaphoreTake(mutex_ADCvalues,(TickType_t)10) == pdTRUE) {
-				MAX6175_temp = read_adc10(0);
-				H3_current   = read_adc10(1);
-				batt_voltage = read_adc10(2);
-				acceleration = read_adc10(7);
+				MAX6175_temp = MAX6175_temp_local;
+				H3_current   = H3_current_local;
+				batt_voltage = batt_voltage_local;
+				acceleration = acceleration_local;
 				xSemaphoreGive(mutex_ADCvalues);
 			}
 		}
@@ -242,6 +250,12 @@ static void faultChecker(void *pvParameters) {
 	TickType_t xLastWakeTime = xTaskGetTickCount();
 	const TickType_t delay = configTICK_RATE_HZ;
 	
+	(void)pvParameters;
+	
+	uint8_t UVP_counter = 0x00; // contor protectie subtensiune
+	uint8_t OCP_counter = 0x00; // contor protectie supracurent
+	uint8_t OTP_counter = 0x00; // contor protectie supratemperatura
+	
 	while (1) {
 		if (~(flag_isSet(flags,state_fault))) {
 			// protectie subtensiune
@@ -252,12 +266,7 @@ static void faultChecker(void *pvParameters) {
 					xSemaphoreGive(mutex_ADCvalues);
 				}
 			}
-			if (UVP_counter > 4) {             // daca tensiunea bateriei este sub 30,5V timp de 5 secunde
-				flag_set(flags,state_fault);   // activeaza flag-ul de avarie
-				flag_reset(flags,state_motor); // opreste motorul
-				uart1_puts("log UVP condition met!\n");
-			}
-		
+
 			// protectie supracurent
 			if (mutex_ADCvalues != NULL) {
 				if (xSemaphoreTake(mutex_ADCvalues,(TickType_t)10) == pdTRUE) {
@@ -266,12 +275,7 @@ static void faultChecker(void *pvParameters) {
 					xSemaphoreGive(mutex_ADCvalues);
 				}
 			}
-			if (OCP_counter > 2) {             // daca curentul consumat este peste 30A timp de 3 secunde
-				flag_set(flags,state_fault);   // activeaza flag-ul de avarie
-				flag_reset(flags,state_motor); // opreste motorul
-				uart1_puts("log OCP condition met!\n");
-			}
-			
+
 			// protectie supratemperatura
 			if (mutex_ADCvalues != NULL) {
 				if (xSemaphoreTake(mutex_ADCvalues,(TickType_t)10) == pdTRUE) {
@@ -279,6 +283,17 @@ static void faultChecker(void *pvParameters) {
 					else OTP_counter += 1; // daca curentul consumat este peste 30A incrementeaza contorul
 					xSemaphoreGive(mutex_ADCvalues);
 				}
+			}
+
+			if (UVP_counter > 4) {             // daca tensiunea bateriei este sub 30,5V timp de 5 secunde
+				flag_set(flags,state_fault);   // activeaza flag-ul de avarie
+				flag_reset(flags,state_motor); // opreste motorul
+				uart1_puts("log UVP condition met!\n");
+			}
+			if (OCP_counter > 2) {             // daca curentul consumat este peste 30A timp de 3 secunde
+				flag_set(flags,state_fault);   // activeaza flag-ul de avarie
+				flag_reset(flags,state_motor); // opreste motorul
+				uart1_puts("log OCP condition met!\n");
 			}
 			if (OTP_counter > 59) {            // daca temperatura este peste 85*C timp de 60 secunde
 				flag_set(flags,state_fault);   // activeaza flag-ul de avarie
@@ -296,6 +311,12 @@ static void UART1_sendData(void *pvParameters) {
 	char tx_buffer[UART1_TX_BUFFER_SIZE];
 	
 	(void)pvParameters;
+	// variabile locale
+	float    speed = 0.0;
+	uint16_t MAX6175_temp_local = 0x00;
+	uint16_t H3_current_local   = 0x00;
+	uint16_t batt_voltage_local = 0x00;
+	uint16_t acceleration_local = 0x00;
 	
 	while (1) {
 		pin_SetHI(D,0);
@@ -305,11 +326,13 @@ static void UART1_sendData(void *pvParameters) {
 		
 		if (mutex_speedLevel != NULL) {
 			if (xSemaphoreTake(mutex_speedLevel,(TickType_t)10) == pdTRUE) {
-				speed = (float)(speed_level*0.3734); // speed = (hall_pulsesPerSec/20)*(pi*26)*(0,0254*3,6)
+				speed = (float)speed_level;
 				speed_level = 0;
 				xSemaphoreGive(mutex_speedLevel);
 			}
 		}
+		
+		speed = (float)(speed*0.3734); // speed = (hall_pulsesPerSec/20)*(pi*26)*(0,0254*3,6)
 		speed_whole = (uint8_t)speed;
 		speed_fract = (uint8_t)((speed - (float)speed_whole)*100);
 		sprintf(tx_buffer,"SW %d\n",speed_whole); uart1_puts(tx_buffer);
@@ -317,13 +340,19 @@ static void UART1_sendData(void *pvParameters) {
 		
 		if (mutex_ADCvalues != NULL) {
 			if (xSemaphoreTake(mutex_ADCvalues,(TickType_t)10) == pdTRUE) {
-				sprintf(tx_buffer,"P %d\n",acceleration); uart1_puts(tx_buffer);
-				sprintf(tx_buffer,"B %d\n",batt_voltage); uart1_puts(tx_buffer);
-				sprintf(tx_buffer,"T %d\n",MAX6175_temp); uart1_puts(tx_buffer);
-				sprintf(tx_buffer,"C %d\n",H3_current);   uart1_puts(tx_buffer);
+				MAX6175_temp_local = MAX6175_temp;
+				H3_current_local   = H3_current;
+				batt_voltage_local = batt_voltage;
+				acceleration_local = acceleration;
 				xSemaphoreGive(mutex_ADCvalues);
 			}
 		}
+
+		sprintf(tx_buffer,"P %d\n",acceleration_local); uart1_puts(tx_buffer);
+		sprintf(tx_buffer,"B %d\n",batt_voltage_local); uart1_puts(tx_buffer);
+		sprintf(tx_buffer,"T %d\n",MAX6175_temp_local); uart1_puts(tx_buffer);
+		sprintf(tx_buffer,"C %d\n",H3_current_local);   uart1_puts(tx_buffer);
+
 		pin_SetLO(D,0);
 		vTaskDelayUntil(&xLastWakeTime, delay);
 	}

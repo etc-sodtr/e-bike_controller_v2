@@ -76,9 +76,9 @@ volatile uint16_t MAX6175_temp = 0x00;
 volatile uint16_t hall_pulsesPerSec = 0x00;
 volatile uint8_t  hall_sensorStates = 0x00;
 
-volatile uint16_t speed_level       = 0x00;
-volatile uint8_t  speed_whole       = 0x00; // pentru afisare viteza - partea intreaga a numarului
-volatile uint8_t  speed_fract       = 0x00; // pentru afisare viteza - partea fractionara a numarului
+volatile uint16_t speed_level = 0x00;
+volatile uint8_t  speed_whole = 0x00; // pentru afisare viteza - partea intreaga a numarului
+volatile uint8_t  speed_fract = 0x00; // pentru afisare viteza - partea fractionara a numarului
 
 volatile uint16_t motor_power         = 0x00;
 volatile uint16_t motor_power_limited = 0x00;
@@ -96,7 +96,7 @@ volatile uint8_t flags = 0b00000000;
 /*** END GLOBAL VARIABLES SECTION ***/
 
 /*** MUTEXES SECTION ***/
-SemaphoreHandle_t mutex_ADCvalues = NULL;
+SemaphoreHandle_t mutex_ADCvalues  = NULL;
 SemaphoreHandle_t mutex_speedLevel = NULL;
 /*** END MUTEXES SECTION ***/
 
@@ -109,9 +109,9 @@ ISR(TIMER0_OVF_vect) {
 	hall_sensorStates |= (hall_A_state<<2)|(hall_B_state<<1)|(hall_C_state<<0); // actualizeaza starea curenta a senzorilor
 
 	// verifica nivelul de acceleratie
-	if      (acceleration <= accel_min_val) {flag_reset(flags,state_motor); motor_power = 0;}
-	else if (acceleration >= accel_max_val) {flag_set(flags,state_motor);	motor_power = 1200;}
-	else                                    {flag_set(flags,state_motor);   motor_power = 2*(acceleration-accel_min_val);}
+	if      (acceleration <= accel_min_val) {taskENTER_CRITICAL(); flag_reset(flags,state_motor); taskEXIT_CRITICAL(); motor_power = 0;}
+	else if (acceleration >= accel_max_val) {taskENTER_CRITICAL(); flag_set(flags,state_motor);	  taskEXIT_CRITICAL(); motor_power = 1200;}
+	else                                    {taskENTER_CRITICAL(); flag_set(flags,state_motor);   taskEXIT_CRITICAL(); motor_power = 2*(acceleration-accel_min_val);}
 	
 	BLDC_HPWM_LON(hall_sensorStates, flag_isSet(flags,state_motor), motor_power_limited);
 
@@ -286,18 +286,23 @@ static void faultChecker(void *pvParameters) {
 			}
 
 			if (UVP_counter > 4) {             // daca tensiunea bateriei este sub 30,5V timp de 5 secunde
+				taskENTER_CRITICAL();
 				flag_set(flags,state_fault);   // activeaza flag-ul de avarie
 				flag_reset(flags,state_motor); // opreste motorul
 				uart1_puts("log UVP condition met!\n");
 			}
 			if (OCP_counter > 2) {             // daca curentul consumat este peste 30A timp de 3 secunde
+				taskENTER_CRITICAL();
 				flag_set(flags,state_fault);   // activeaza flag-ul de avarie
 				flag_reset(flags,state_motor); // opreste motorul
+				taskEXIT_CRITICAL();
 				uart1_puts("log OCP condition met!\n");
 			}
 			if (OTP_counter > 59) {            // daca temperatura este peste 85*C timp de 60 secunde
+				taskENTER_CRITICAL();
 				flag_set(flags,state_fault);   // activeaza flag-ul de avarie
 				flag_reset(flags,state_motor); // opreste motorul
+				taskEXIT_CRITICAL();
 				uart1_puts("log OTP condition met!\n");
 			}
 		}
@@ -370,21 +375,35 @@ static void UART1_getData(void *pvParameters) {
 		if (uart1_gets(rx_buffer) == 0) ;
 		else {
 			if (strcmp(rx_buffer,"FAR") == 0) {
+				taskENTER_CRITICAL();
 				flag_toggle(flags,state_headlight);
+				taskEXIT_CRITICAL();
 				pin_SetState(A,0,flag_isSet(flags,state_headlight));
 				sprintf(tx_buffer,"F %d\n",flag_isSet(flags,state_headlight));
 				uart1_puts(tx_buffer);
 			}
 			if (strcmp(rx_buffer,"SL") == 0) {
+				taskENTER_CRITICAL();
 				flag_reset(flags,state_sigR);
 				flag_toggle(flags,state_sigL);
+				taskEXIT_CRITICAL();
 			}
 			if (strcmp(rx_buffer,"SR") == 0) {
+				taskENTER_CRITICAL();
 				flag_reset(flags,state_sigL);
 				flag_toggle(flags,state_sigR);
+				taskEXIT_CRITICAL();
 			}
-			if (strcmp(rx_buffer,"DBG_1") == 0) flag_set(flags,state_debug);
-			if (strcmp(rx_buffer,"DBG_0") == 0) flag_reset(flags,state_debug);
+			if (strcmp(rx_buffer,"DBG_1") == 0) {
+				taskENTER_CRITICAL();
+				flag_set(flags,state_debug);
+				taskEXIT_CRITICAL();
+			}
+			if (strcmp(rx_buffer,"DBG_0") == 0) {
+				taskENTER_CRITICAL();
+				flag_reset(flags,state_debug);
+				taskEXIT_CRITICAL();
+			}
 		}
 		rx_buffer[0] = '\0';
 		vTaskDelayUntil(&xLastWakeTime, delay);
